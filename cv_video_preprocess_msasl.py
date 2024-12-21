@@ -26,9 +26,6 @@ from model import *
 from torchinfo import summary
 #0:org_text	1:clean_text 2:start_time 3:signer_id	4:signer	5:start	6:end	
 #7:file	8:label	9:height	10:fps	 11:end_time	12:url	13:text	14:box	15:width 16:review
-st=[]
-st1=[]
-st2=[]
 temporal_transform = transforms.Compose([
   transforms.RandomHorizontalFlip(),
   transforms.RandomRotation(10),
@@ -45,48 +42,6 @@ spatial_transform = transforms.Compose([
   transforms.ToTensor(),
   transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),                            
 ])
-
-def extract_flows(source, dest, df):
-  files = [f for f in listdir(source) if isfile(join(source, f))]
-  if not os.path.exists(dest):
-        os.mkdir(dest) 
-  for i in range(0, df.shape[0]):
-    start_frame = df.iloc[i,5]
-    video = cv2.VideoCapture(source + df.iloc[i,12]) 
-    file_path = dest  + df.iloc[i,12] + '_' + df.iloc[i,1]
-    video.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    ret, first_frame = video.read()
-
-    first_frame= cv2.resize(first_frame, (224,224), interpolation = cv2.INTER_AREA)
-    mask = np.zeros_like(first_frame)
-    mask[..., 1] = 255
-
-
-    prev = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
-    flows = prev
-
-    for j in range(start_frame+1, start_frame+10):     
-      if(ret):
-        video.set(cv2.CAP_PROP_POS_FRAMES, j)
-        ret, frame = video.read()
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        current = cv2.resize(gray, (224,224), interpolation = cv2.INTER_AREA)
-        flow = cv2.calcOpticalFlowFarneback(prev, current, None, pyr_scale = 0.5, levels = 5, winsize = 11, iterations = 5, poly_n = 5, poly_sigma = 1.1, flags = 0)
-        
-        magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-        
-        mask[..., 0] = angle * 180 / np.pi / 2
-      
-        mask[..., 2] = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
-
-        rgb = cv2.cvtColor(mask, cv2.COLOR_HSV2BGR)
-        flow_image = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
-        flows = np.dstack((flows, flow_image))
-        prev = current
-      else:
-        print(df.iloc[i,12], j)
-    #print(file_path)    
-    np.save(dest+"/"+file_path, flows)
 class SpatialDataset(datasets.ImageFolder):
 
     def __init__(self,path,df, classes, transform,dir):
@@ -101,8 +56,10 @@ class SpatialDataset(datasets.ImageFolder):
     def __getitem__(self, idx):
 
       url = self.df.iloc[idx,12]
-      video = cv2.VideoCapture(self.dir+"/"+self.path + url)
-    
+      video = cv2.VideoCapture(self.path + url)
+      if not video.isOpened():
+            print(f"Error: Unable to open video file at {self.path + url}")
+            return None, None
       frame = self.df.iloc[idx,6]  - self.df.iloc[idx,5]
       video.set(cv2.CAP_PROP_POS_FRAMES, self.df.iloc[idx,5])
       ret, image = video.read()
@@ -183,9 +140,6 @@ def load_data(path,is_test):
   for value in df['clean_text'].values:
     if value not in classes.keys():
       df.drop(df[df['clean_text']== value].index, inplace = True)
-      st.append(value)
-    else:
-      st1.append(value) 
   # 將 url 欄位值的開頭替換為 'w'，並移除 'https://www.youtube.com'
   df['url'] = df['url'].apply(lambda x :  x.lstrip('https://www.youtube.com/watch?v='))
   return df
@@ -210,8 +164,6 @@ def clean_data(path, df):
         index = files.index(df.iloc[i,12])
         df = df.replace(df.iloc[i,12], with_ext[index])# 替換為完整檔名
         #print(df.iloc[i,12])
-    else:
-        st2.append(df.iloc[i,12])
  
   return df
 classes ={'hello' : 0, 'nice' :1, 'teacher':2,  'eat':3 , 'no':4, 'happy':5, 'like':6, 'orange':7, 'want' :8, 'deaf':9}
@@ -498,7 +450,7 @@ temporal_optimizer = torch.optim.Adam(temporal_model.parameters(), lr=learning_r
 earlystoping = False
 
 
-dataloaders,dataset_sizes,class_names = getdataloader_sizes('temporal',batchsize)#temporal or else(空間)
+dataloaders,dataset_sizes,class_names = getdataloader_sizes('r',batchsize)#temporal or else(空間)
 
 
 trained_spatial_model = train_model(spatial_model, criterion, spatial_optimizer,epoch,device,earlystoping)
