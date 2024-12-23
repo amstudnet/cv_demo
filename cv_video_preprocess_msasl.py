@@ -24,16 +24,21 @@ from os.path import isfile, join
 import json
 from model import *
 from torchinfo import summary
+from torchvision.models import resnet18
+from PIL import Image
+
 #0:org_text	1:clean_text 2:start_time 3:signer_id	4:signer	5:start	6:end	
 #7:file	8:label	9:height	10:fps	 11:end_time	12:url	13:text	14:box	15:width 16:review
 temporal_transform = transforms.Compose([
-  transforms.RandomHorizontalFlip(),
-  transforms.RandomRotation(10),
-  transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-  transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+ 
+  
   transforms.ToTensor(),
   transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),                   
 ])
+#transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+#transforms.RandomHorizontalFlip(),
+#transforms.RandomRotation(10),
+#transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
 
 spatial_transform = transforms.Compose([
   transforms.ToPILImage(),
@@ -41,34 +46,76 @@ spatial_transform = transforms.Compose([
   transforms.CenterCrop(224),
   transforms.ToTensor(),
   transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),                            
-])
+])#transforms.CenterCrop(224),
 class SpatialDataset(datasets.ImageFolder):
+    def __init__(self, path, df, classes, transform, dir):
+        """
+        初始化 SpatialDataset。
 
-    def __init__(self,path,df, classes, transform,dir):
-      self.path = path
-      self.df = df
-      self.transform = transform
-      self.classes = classes
-      self.dir = dir
+        Args:
+            path (str): 圖片所在的根目錄。
+            df (pd.DataFrame): 包含影片和標籤資訊的資料框。
+            classes (dict): 類別字典，將文字標籤對應到數值標籤。
+            transform (callable): 用於處理圖片的 transform。
+            dir (str): 儲存已裁剪圖片的資料夾路徑。
+        """
+        self.path = path  # 根目錄路徑
+        self.df = df  # 資料框
+        self.transform = transform  # 圖片處理方式
+        self.classes = classes  # 類別字典
+        self.dir = dir  # 已裁剪圖片的資料夾路徑
+        # 過濾掉不存在的檔案(因為生成出來的時候有的圖片超爛，我手動刪除)
+        valid_indices = []
+        for idx in range(len(df)):
+            url = df.iloc[idx]['url']
+            start_frame = df.iloc[idx]['start']
+            class_name = df.iloc[idx]['clean_text']
+            image_name = f"{url}_{start_frame}.png"
+            image_path = os.path.join(self.dir, class_name, image_name)
+            if os.path.exists(image_path):
+                valid_indices.append(idx)
+
+        # 更新 DataFrame，只保留存在的檔案
+        self.df = df.iloc[valid_indices].reset_index(drop=True)
+
     def __len__(self):
-      return len(self.df)
+        return len(self.df)
 
     def __getitem__(self, idx):
+        """
+        根據索引返回一張圖片及其標籤。
 
-      url = self.df.iloc[idx,12]
-      video = cv2.VideoCapture(self.path + url)
-      if not video.isOpened():
-            print(f"Error: Unable to open video file at {self.path + url}")
-            return None, None
-      frame = self.df.iloc[idx,6]  - self.df.iloc[idx,5]
-      video.set(cv2.CAP_PROP_POS_FRAMES, self.df.iloc[idx,5])
-      ret, image = video.read()
-      
-      if self.transform:
-        image = self.transform(image)
+        Args:
+            idx (int): 索引值。
 
-      label = self.classes[self.df.iloc[idx,1]]
-      return  (image, label)
+        Returns:
+            tuple: 圖片張量及其標籤。
+        """
+        # 從資料框獲取對應的檔案名稱和類別
+        url = self.df.iloc[idx]['url']
+        start_frame = self.df.iloc[idx]['start']
+        class_name = self.df.iloc[idx]['clean_text']
+        label = self.classes[class_name]
+
+        # 組合圖片檔案的名稱
+        image_name = f"{url}_{start_frame}.png"
+        image_path = os.path.join(self.dir, class_name, image_name)
+        print(image_path)
+ 
+        # 檢查圖片是否存在
+        if not os.path.exists(image_path):
+          print(f"圖片檔案不存在: {image_path}")
+          raise FileNotFoundError(f"圖片檔案不存在: {image_path}")
+
+        # 讀取圖片並應用 transform
+        image = cv2.imread(image_path)
+        
+        #image = Image.open(image_path).convert("RGB")
+        if self.transform:
+            #imgae = torch.from_numpy(image)
+            image =  self.transform(image)
+
+        return (image, label)
 class TemporalDataset(datasets.ImageFolder):
 
   def __init__(self,path,df, classes, transform,dir):
@@ -95,13 +142,13 @@ class TemporalDataset(datasets.ImageFolder):
      
 def getdataloader_sizes(net, batchsize): 
   if(net == 'temporal'):
-    train =  TemporalDataset( path = 'train_flows', df = train_df, classes = classes, transform = temporal_transform , dir="train_flows")
-    validation = TemporalDataset( path = 'val_flows', df = val_df,  classes = classes, transform = temporal_transform ,dir="val_flows")
-    test = TemporalDataset( path = 'test_flows', df = test_df,  classes = classes, transform = temporal_transform,dir ="test_flows")
+    train =  TemporalDataset( path = '2train_flows10', df = train_df, classes = classes, transform = temporal_transform , dir="2train_flows10")
+    validation = TemporalDataset( path = '2val_flows10', df = val_df,  classes = classes, transform = temporal_transform ,dir="2val_flows10")
+    test = TemporalDataset( path = '2test_flows10', df = test_df,  classes = classes, transform = temporal_transform,dir ="2test_flows10")
   else:
-    train =  SpatialDataset( path = train_videos, df = train_df, classes = classes, transform = spatial_transform,dir ="train_videos")
-    validation = SpatialDataset( path = val_videos, df = val_df,  classes = classes, transform = spatial_transform, dir="val_videos")
-    test = SpatialDataset( path = test_videos, df = test_df,  classes = classes, transform = spatial_transform,dir ="test_videos")
+    train =  SpatialDataset( path = "train_png", df = train_df, classes = classes, transform = spatial_transform,dir ="train_png")
+    validation = SpatialDataset( path = "val_png", df = val_df,  classes = classes, transform = spatial_transform, dir="val_png")
+    test = SpatialDataset( path = "test_png", df = test_df,  classes = classes, transform = spatial_transform,dir ="test_png")
 
   
   all_datasets = {'train' : train, 'validation' : validation, 'test' : test}
@@ -115,20 +162,7 @@ def getdataloader_sizes(net, batchsize):
   print(class_names)
   print(dataset_sizes)
   return dataloaders,dataset_sizes,class_names
-def extract_frames(source, dest, df):
-  files = [f for f in listdir(source) if isfile(join(source, f))]
-  for i in range(0, df.shape[0]):
-    start_frame = df.iloc[i,5]
-    end_frame = df.iloc[i,6]
-    video = cv2.VideoCapture(source + df.iloc[i,12])
-    for j in range(start_frame, end_frame):     
-      video.set(cv2.CAP_PROP_POS_FRAMES, j)   
-      ret, image = video.read()
-      if(ret):
-        file_path = dest + df.iloc[i,1] + '/' + df.iloc[i,12] + '_' + str(j) + '.png'
-        cv2.imwrite(file_path, image)
-      else:
-        print(df.iloc[i,12], j)
+
 def check_device():
     print(torch.cuda.is_available())
     print(torch.cuda.device_count())
@@ -166,7 +200,10 @@ def clean_data(path, df):
         #print(df.iloc[i,12])
  
   return df
-classes ={'hello' : 0, 'nice' :1, 'teacher':2,  'eat':3 , 'no':4, 'happy':5, 'like':6, 'orange':7, 'want' :8, 'deaf':9}
+#classes ={'teacher':0,  'eat':1 ,'hello':2 }
+classes ={'teacher':0,  'happy':1 }
+#classes ={'teacher':0,  'eat':1 }
+#classes ={'hello' : 0, 'nice' :1, 'teacher':2,  'eat':3 , 'no':4, 'happy':5, 'like':6, 'orange':7, 'want' :8, 'deaf':9}
 #classes = "MSASL_classes.json"
 train_json = "MSASL_train.json"
 val_json = "MSASL_val.json"
@@ -220,6 +257,7 @@ Name: 15, dtype: object
 train_df = clean_data(train_videos,train_df)
 val_df = clean_data(val_videos,val_df)
 test_df =  clean_data(test_videos,test_df)
+"""
 c1={}
 for text in train_df["text"].values:
     if c1.get(text)==None:
@@ -234,6 +272,7 @@ print(c1_sorted)
 #print(len(st2))#108
 #print(train_df)#243
 #print(train_df.iloc[5,12])
+"""
 """
 洗資料前後
 [('eat', 57), ('nice', 54), ('want', 53), ('orange', 50), ('teacher', 50), ('like', 48), ('deaf', 46), ('no', 46), ('happy', 38), ('hello', 30)]
@@ -279,8 +318,8 @@ else:
 #extract_flows(train_videos, 'train_flows', train_df)#(224,224,10)
 #extract_flows(val_videos,'val_flows',val_df)#(224,224,10)
 #extract_flows(test_videos, 'test_flows', test_df)#(224,224,10)
-a=np.load("train_flows/train_flows_8t-Avfk310.mp4_deaf.npy")
-print(a.shape) #(224,224,10)
+#a=np.load("train_flows/train_flows_8t-Avfk310.mp4_deaf.npy")
+#print(a.shape) #(224,224,10)
 
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -305,7 +344,7 @@ def plot_graph(plotlist1,plotlist2,ylabel):
     plt.xlabel("Training Epochs")
     plt.ylabel(ylabel)
     plt.plot(plotlist1, color="green")
-    plt.plot(plotlist2, color="yellow")
+    plt.plot(plotlist2, color="red")
     
     plt.gca().legend(('Train', 'Validation'))
     plt.show()
@@ -436,55 +475,79 @@ def train_model(model, criterion, optimizer, epoch_number,device,earlystopping):
 ImageFile.LOAD_TRUNCATED_IMAGES = True 
 #spatial_net = SpatialNet()
 #temporal_net = TemporalNet()
-spatial_model = SpatialNet()
+#spatial_model = SpatialNet()
+spatial_model = models.resnet50(pretrained=True)
+in_features = spatial_model.fc.in_features
+fc = nn.Linear(in_features=in_features, out_features=len(classes))
+spatial_model.fc = fc
+#print(spatial_model )
 temporal_model = TemporalNet()
 
 
 #初始化參數
 learning_rate = 0.001#0.00002
-epoch = 80
-batchsize = 64
+epoch = 50
+batchsize = 32
 criterion = nn.CrossEntropyLoss()
 spatial_optimizer = torch.optim.Adam(spatial_model.parameters(), lr=learning_rate)
+#spatial_lr_scheduler = torch.optim.lr_scheduler.StepLR(spatial_optimizer , step_size=7, gamma=0.1)
+
 temporal_optimizer = torch.optim.Adam(temporal_model.parameters(), lr=learning_rate)
+temporal_lr_scheduler = torch.optim.lr_scheduler.StepLR(temporal_optimizer , step_size=7, gamma=0.1)
 earlystoping = False
 
 
-dataloaders,dataset_sizes,class_names = getdataloader_sizes('r',batchsize)#temporal or else(空間)
+dataloaders,dataset_sizes,class_names = getdataloader_sizes('spatial',batchsize)#temporal or else(空間)
 
 
 trained_spatial_model = train_model(spatial_model, criterion, spatial_optimizer,epoch,device,earlystoping)
-trained_temporal_model = train_model(temporal_model, criterion, temporal_optimizer,epoch,device,earlystoping)
+#trained_temporal_model = train_model(temporal_model, criterion, temporal_optimizer,epoch,device,earlystoping)
 
-fusion_model = FusionNet(trained_spatial_model,trained_temporal_model)
-fusion_optimizer = torch.optim.Adam(fusion_model.parameters(), lr=learning_rate)
-trained_fusion_model = train_model(fusion_model, criterion, fusion_optimizer,epoch,device,earlystoping)
-def calculateTestAcc(trained_model,dataloaders,dataset_sizes):
-  confusion_matrixx = torch.zeros(10, 10)
+#fusion_model = FusionNet(trained_spatial_model,trained_temporal_model)
+#fusion_optimizer = torch.optim.Adam(fusion_model.parameters(), lr=learning_rate)
+#trained_fusion_model = train_model(fusion_model, criterion, fusion_optimizer,epoch,device,earlystoping)
+def calculateTestAcc(trained_model,dataloaders,dataset_sizes,class_names):
+  confusion_matrixx = torch.zeros(len(class_names), len(class_names))
   np.set_printoptions(precision=2)
   current_phase_correct_outputnumber = 0
 
   with torch.no_grad():
+    # 使用 torch.no_grad() 表示禁用自動梯度計算。  
+    # 減少記憶體使用，並加速推論過程，因為不需要計算反向傳播。
     for i, (inputs, classes) in enumerate(dataloaders['test']):
         inputs = inputs.to(torch.float32)
         inputs = inputs.to(device)
+        # 將輸入數據移動到設備（例如 GPU 或 CPU）上。
         classes = classes.to(device)
-        outputs = trained_model(inputs)
-        _, preds = torch.max(outputs, 1)
-        current_phase_correct_outputnumber += torch.sum(preds == classes.data)
-          
-        for t, p in zip(classes.view(-1), preds.view(-1)):
-            confusion_matrixx[t.long(), p.long()] += 1
-   
-    test_acc = 100*current_phase_correct_outputnumber.double() / dataset_sizes['test']
+        # 將標籤移動到同一設備上，確保輸入和標籤的設備一致。
 
+        outputs = trained_model(inputs)
+        # 將輸入數據通過已訓練的模型進行推論，獲取模型的輸出結果。
+        _, preds = torch.max(outputs, 1)
+        # 使用 `torch.max` 獲取每個樣本的預測類別。
+        # `outputs` 是概率分佈，`preds` 是每個樣本預測的最大概率所對應的類別索引。
+        print(classes.data)
+        print(preds)
+        current_phase_correct_outputnumber += torch.sum(preds == classes.data)
+        # 比較預測類別 `preds` 與真實標籤 `classes.data`。
+        # 將正確分類的樣本數加到 `current_phase_correct_outputnumber` 中。
+
+        for t, p in zip(classes.view(-1), preds.view(-1)):
+          confusion_matrixx[t.long(), p.long()] += 1
+        
+        #cm=confusion_matrix(classes.view(-1),preds.view(-1))
+        #print(confusion_matrixx)
+        # 更新混淆矩陣
+       
+    test_acc = 100*current_phase_correct_outputnumber.double() / dataset_sizes['test']
+    confusion_matrix_normalized = confusion_matrixx / confusion_matrixx.sum(1, keepdim=True)
     print('Test Acc: {:4f}'.format(test_acc))
-    
-  plt.figure(figsize = (10,10))
-  plot_confusion_matrix(confusion_matrixx,classes=class_names)
+   
+  plt.figure(figsize = (10,10))#(10,10)
+  plot_confusion_matrix(confusion_matrix_normalized,classes=class_names)
   plt.show()
-calculateTestAcc(trained_fusion_model,dataloaders,dataset_sizes)
-test_input = torch.randn(64, 10, 224, 224)#(batch_size=64, 通道數=10, 圖像尺寸=224x224)
-summary(trained_fusion_model, input_data=test_input)
+calculateTestAcc(trained_spatial_model  ,dataloaders,dataset_sizes,list(classes.keys()))#原本:trained_fusion_model
+test_input = torch.randn(64, 3, 224, 224)#(batch_size=64, 通道數=10, 圖像尺寸=224x224)
+summary(trained_spatial_model , input_data=test_input)#原本:trained_fusion_model
 
 
