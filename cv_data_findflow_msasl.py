@@ -43,7 +43,7 @@ def extract_flows(source, dest, df):
     prev = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
     flows = prev
 
-    for j in range(start_frame+1, start_frame+5):     
+    for j in range(start_frame+1, start_frame+10):     
       if(ret):
         video.set(cv2.CAP_PROP_POS_FRAMES, j)
         ret, frame = video.read()
@@ -98,7 +98,8 @@ def clean_data(path, df):
         #print(df.iloc[i,12])
  
   return df
-classes ={'hello' : 0, 'nice' :1, 'teacher':2,  'eat':3 , 'no':4, 'happy':5, 'like':6, 'orange':7, 'want' :8, 'deaf':9}
+classes ={'teacher':0,  'eat':1 ,'hello':2 }
+#classes ={'hello' : 0, 'nice' :1, 'teacher':2,  'eat':3 , 'no':4, 'happy':5, 'like':6, 'orange':7, 'want' :8, 'deaf':9}
 #classes = "MSASL_classes.json"
 train_json = "MSASL_train.json"
 val_json = "MSASL_val.json"
@@ -116,10 +117,10 @@ val_df = clean_data(val_videos,val_df)
 test_df =  clean_data(test_videos,test_df)
 
 
-#extract_flows(train_videos, 'train_flows5', train_df)#(224,224,5)
-#extract_flows(val_videos,'val_flows5',val_df)#(224,224,5)
-#extract_flows(test_videos, 'test_flows5', test_df)#(224,224,5)
-
+extract_flows(train_videos, '3train_flows10', train_df)#(224,224,5)
+extract_flows(val_videos,'3val_flows10',val_df)#(224,224,5)
+extract_flows(test_videos, '3test_flows10', test_df)#(224,224,5)
+"""
 #test channel
 a=np.load("train_flows5/train_flows5_8t-Avfk310.mp4_deaf.npy")
 print(a.shape) #(224,224,5)
@@ -127,5 +128,6 @@ print(len(os.listdir('train_flows5')))#194
 print(len(os.listdir('train_flows')))#194
 print(len(os.listdir('val_flows5')))#63
 print(len(os.listdir('val_flows')))#63
-print(len(os.listdir('test_flows5')))#
-print(len(os.listdir('test_flows')))
+print(len(os.listdir('test_flows5')))#46
+print(len(os.listdir('test_flows')))#46
+"""
